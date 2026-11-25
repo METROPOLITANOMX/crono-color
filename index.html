@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://unpkg.com"></script>
+<style>
+  body{background:#111;color:#fff;font-family:sans-serif;text-align:center;margin:10px}
+  button,input{padding:12px;font-size:16px;margin:5px;border-radius:6px}
+  video{width:100%;max-width:360px;background:#000}
+  #mira{width:40px;height:40px;border:3px solid lime;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+  #crono{font-size:48px;color:#0f8;margin:10px}
+</style>
+
+<div id="menu">
+  <button onclick="cam()">📷 Cámara</button>
+  <button onclick="mon()">⏱️ Monitor</button>
+</div>
+
+<div id="vcam" hidden>
+  <div>Código: <b id="id">...</b></div>
+  <div style="position:relative;display:inline-block"><video id="v1" autoplay playsinline muted></video><div id="mira"></div></div>
+  <div id="txt">Esperando...</div>
+</div>
+
+<div id="vmon" hidden>
+  <input id="cod" type="number" placeholder="Código"><button onclick="con()">Ir</button>
+  <div id="crono">0.00</div>
+  <video id="v2" autoplay playsinline></video>
+  <div id="log"></div>
+</div>
+
+<script>
+let p, c, st, last=0, t0=0, run=0, ctx=new AudioContext();
+const beep=()=>{ctx.resume();let o=ctx.createOscillator();o.connect(ctx.destination);o.start();o.stop(ctx.currentTime+.15)};
+
+async function cam(){
+  menu.hidden=1; vcam.hidden=0; beep();
+  let n=Math.floor(1000+Math.random()*9000);
+  p=new Peer('c-'+n); p.on('open',()=>id.innerText=n);
+  p.on('connection',x=>{c=x; if(st)p.call(c.peer,st)});
+  st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+  v1.srcObject=st;
+  let cv=document.createElement('canvas'), x=cv.getContext('2d'); cv.width=cv.height=40;
+  setInterval(()=>{
+    if(v1.readyState<4)return;
+    x.drawImage(v1,v1.videoWidth/2-20,v1.videoHeight/2-20,40,40,0,0,40,40);
+    let d=x.getImageData(0,0,40,40).data, r=0,g=0,b=0,k=d.length/4;
+    for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2]}
+    r/=k; g/=k; b/=k;
+    let col = (r>200&&g>200&&b>200)?'BLANCO':(r>150&&g<90&&b<90)?'ROJO':(b>150&&r<90)?'AZUL':(r>160&&g>160&&b<90)?'AMARILLO':0;
+    if(col && Date.now()-last>1500){
+      last=Date.now(); beep(); txt.innerText=col;
+      if(c&&c.open) c.send(col);
+    }
+  },100);
+}
+
+function mon(){
+  menu.hidden=1; vmon.hidden=0; p=new Peer();
+  p.on('call',call=>{call.answer();call.on('stream',s=>v2.srcObject=s)});
+}
+
+function con(){
+  c=p.connect('c-'+cod.value);
+  c.on('data',col=>{
+    let now=performance.now();
+    if(run) log.innerHTML=`<div>${col}: ${((now-t0)/1000).toFixed(2)}s</div>`+log.innerHTML;
+    else setInterval(()=>crono.innerText=((performance.now()-t0)/1000).toFixed(2),30);
+    t0=now; run=1;
+  });
+}
+</script>
